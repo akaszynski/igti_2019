@@ -1,0 +1,499 @@
+%twocolumn %%% and use 10pt options with the asme2e format
+\documentclass[twocolumn,10pt]{asme2e}
+\special{papersize=8.5in, 11in}
+\usepackage{amsfonts}
+\usepackage{multirow}
+\usepackage{latexsym}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{siunitx}
+
+
+%% The class has several options
+%  onecolumn/twocolumn - format for one or two columns per page
+%  10pt/11pt/12pt - use 10, 11, or 12 point font
+%  oneside/twoside - format for oneside/twosided printing
+%  final/draft - format for final/draft copy
+%  cleanfoot - take out copyright info in footer leave page number
+%  cleanhead - take out the conference banner on the title page
+%  titlepage/notitlepage - put in titlepage or leave out titlepage
+%  
+%% The default is oneside, onecolumn, 10pt, final
+
+
+% Conference info
+\confshortname{GT2019}
+\conffullname{ASME Turbo Expo 2019: Turbomachinery Technical Conference and
+Exposition}
+\confdate{17-21}
+\confmonth{June}
+\confyear{2019}
+\confcity{Phoenix}
+\confcountry{United States}
+\papernum{GT2019-XXXXX}
+
+\title{BLENDER: AN AUTOMATED MESH MORPHING BLENDING TOOL TO EXTEND BLEND LIMITS FOR INSERTED BLADES AND BLADED ROTORS}
+
+\author{Alex A. Kaszynski\thanks{Address all correspondence to this author.}
+    \affiliation{Advanced Engineering Solutions\\
+	Dayton, Ohio, 45431\\
+	akascap@gmail.com
+    }
+}
+
+\author{Joseph A. Beck
+    \affiliation{
+	Perceptive Engineering Analytics, LLC\\
+	Minneapolis, Minnesota 55418\\
+    Joseph.A.Beck@peanalyticsllc.com
+    }	
+}
+
+\author{Jeffrey M. Brown
+    \affiliation{AFRL/RQTI\\
+    Wright-Patterson AFB, Ohio, 45433\\
+   Jeffrey.Brown.70@wpafb.af.mil
+    }
+}
+
+\begin{document}
+
+\maketitle    
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+{\it 
+
+Blade blending is the process of removing and smoothing damaged sections of compressor and turbine blades.  Blending changes both the aerodynamic efficiency, frequency response, and mode shape of the blade being modified.  Given the narrow operating parameters of turbine engine machinery, particularly bladed rotors, tight blend limits on inserted blades and IBRs have been established to avoid intentionally mistuning a blade and causing response localization leading to high cycle fatigue.  The goal of this research is to extend blend limits by providing a robust tool capable of simulating multiple blends on both finite element model as well as computational fluid dynamic meshes.
+
+This paper presents an automated blend simulator tool designed to predict the effect of removing material from a blade at any position, orientation, or depth without CAD regeneration.  Scallop blends can be described simply by their orientation, semi-major (length), semi-minor (depth), and fillet radius.  As this is a CAD-less remeshing tool, multiple blends can be placed on the same mesh without the risk of model corruption to boolean errors.  This tool will be able to predict both the frequency shift of a single blade due to the addition of a blend or blends as well as determine the increase in both the steady and vibrational stress for a variety of modes.  The robustness of this tool depends on leveraging previous research, FEMORPH, but applied in a manner that does not rely on tessellated scan data from a blue light scanner unless used for verification of an actual blend.  The approach presented will be experimentally validated by collecting free-free forced response results from a scanning laser vibrometer from an unblended and blended blade to demonstrate the accuracy of this tool as both an individual blade and fleet prediction tool.  
+
+}
+\end{abstract}
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% \section*{NOMENCLATURE}
+
+%% \begin{tabbing}
+%% 	XXXXXX \= \kill% this line sets tab stop
+%% 	CAD   \> Computer-aided design\\
+%% 	CFD   \> Computational fluid dynamics \\
+%% 	CMM   \> Coordinate measuring machine \\
+%% 	CVT   \> Centroidal voronoi tessellation \\
+%%         DOF   \> Degrees of freedom \\
+%% 	FEA   \> Finite element analysis \\
+%% 	FEM   \> Finite element model \\
+%% 	FMM ID\> Fundamental mistuning model identification \\
+%% 	FRF   \> Frequency response function \\
+%% 	GMM   \> Geometrically mistuned model \\
+%% 	IBR   \> Integrally bladed rotor \\
+%% 	ICP   \> Iterative closest point \\
+%%         LOS   \> Line of Sight \\
+%% 	MAC   \> Modal Assurance Criterion \\
+%% 	MORPH \> Automated mesh morphing algorithm \\
+%% 	R     \> Pearson correlation coefficient \\ 
+%% 	RBF   \> Radial basis function \\
+%% 	ROM   \> Reduced order model \\
+%% 	%% TSD   \> Tessellated scan data\\
+%% 	TWE   \> Traveling wave excitation \\
+%% \end{tabbing}
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% \section*{INTRODUCTION}
+%% There are a variety of reasons to create finite element models (FEM) from actual manufactured turbo machinery flight hardware, the foremost being the ability to evaluate the structural performance characteristics and computational fluid dynamics (CFD) of the manufactured part and compare it to the nominal (as-designed) model.  As-manufatured parts may be rejected for falling outside their design envelope while still remaining in the performance envelope as determined by a model based on as-manufactured geometry.  Another reason is to determine if the part is still within operating tolerances after being modified in a significant manner, either intentionally (blending turbine blades\cite{jones2012}) or unintentionally due to foreign object damage (FOD).
+
+%% The advantages of accurate digital models for analytical validation have enabled the development of various approaches to directly or indirectly create geometrically accurate FEMs.  Restricting the methods to those applicable to bladed turbomachinery, the first ``as-manufactured'' approach came about using a coordinate measurement machine (CMM) to acquire individual physical coordinates of a physical part\cite{sinha:011013}.  This approach was modified to work directly from tesselated surface geometry from an optical scanner and applied by this author in \cite{Kas2013}.  This approach was used to compute the variation in blade natural frequency for mistuning prediction.  CMM based approaches and their derivatives tend to be rigid and prone to failure as they require CAD to be first procedurally generated and then to be meshed by a commercial mesher.  These approaches are sensitive to variations in geometry and are not suited for large variations between the original model and the as-manufactured part.  In practice, this approach proved failure prone enough to necessitate the development of an alternative approach to generate a FEM without relying on CAD as an intermediate step.
+
+%% A semi-automated CAD-free approach was first pioneered by the author in \cite{Kas2014, Kas2015} and researched more recently in \cite{maywald2017}.  This approach begins with a nominal FEM and iteratively updates the model using an intelligent nearest neighbor search to modify the surface of the FEM to match the 3D as-manufactured geometry obtained using a white or blue light optical scanner.  Optical blue light fringe projection scanners have been shown to be accurate to at least \SI{7.6}{\micro\metre} \cite{BERNAL2013591} for a scanning volume that encompasses flight hardware and represent a significant advance in geometry acquisition technology.  These scanners can rapidly acquire several million of points and, once post-processed, output a tessellated surface containing both the location and and surface normals of the part being scanned.  This permits the acquisition of all line of signt (LOS) geometry from a target part and, once modified using a mesh metamorphosis approach (MORPH\cite{Kas2015}) or a similar mesh morphing approach\cite{maywald2017}, digital models can be generated that have been shown to be sufficiently accurate to predict the blade to blade frequency variations that lead to modal energy confinement due to mistuning.
+
+%% One limitation of the mesh metamorphosis approach is that it still requires a nominal FEM to be generated and to serve as the ``seed'' mesh for the mesh updating scheme.  While the creation of such a model takes a fraction of the time it would take to create an entire population of models, this step still requires CAD since modern commercial meshers are reliant on CAD based volumetric geometry for unstructured mesh generation.  While this CAD can be obtained using either as-designed CAD or CAD obtained from reverse engineering\cite{she2007}, the meshing process is still time consuming and is sensitive to mesh convergence\cite{Oh1999, Ains}.  An alternative approach investigated in this paper would is to generate the FEM directly from the tessellated surface, thus skipping the tedious CAD modeling and meshing steps.  This approach has been implemented in \cite{TOMAC2011589} for CFD meshes, but to-date and to this author's knowledge, there has been no research with experimental validation to determine the validity of a direct scan-to-FEM approach.
+
+%% The research here seeks to demonstrate the usefulness and fidelity of an automated tessellated surface scan to 3D tessellated FEM approach.  The approach will first be described academically, then applied and validated analytically, and finally cross-validated using experimentally obtained results from a laser vibrometer and several as-manufactured blades. 
+
+%% \section*{DIRECT SCAN TO FEM}
+%% FEMs and other digital models can be generated from raw tessellated surfaces with the help of reduction algorithms to break the raw surface geometry into sections or other more primitive representations.  Digital point clouds obtained from optical blue light scanners or other optical scanners have been segmented into cross sections to generate CAD-like objects for downstream meshing for a variety of applications, including the simplification of geometry from airborne laser scanners\cite{sensors2015} or in CT or other medical scans \cite{PARASHAR2016696}.  Of interest here is the direct 3D Delaunay tessellation of the point cloud or tessellated surface obtained from the optical scanner which avoids many of the complications related to mesh segmentation and reduction that so often limit or cripple spline based reduction approaches\cite{Kas2014}.
+
+%% The approach proposed here leverages several well known algorithms into an automated surface scan to 3D tetrahedral FEM that requires minimal user intervention.  The approach will be outlined academically while simultaneously showing its application on an as-manufactured fan blade and IBR.
+
+%% \subsection*{Manifold 3D Delaunay Tessellation from Scan Data}
+%% Tessellated surfaces from a structured blue light scanner are unstructured triangular surface meshes containing vertices and faces representing the physical part.  This mesh surface,  $\mathcal{M}=\{F,\ V\}$, is a triangular mesh composed of a set of vertices, $V$, and triangular faces, $F$.  The tessellated surfaces are geometrically accurate but are not suitable for direct finite element surface meshing due to mesh self-intersections, non-manifold geometry, and poor surface geometry quality characterized by high triangle aspect ratios and small triangle dihedral angles.  As such, geometry obtained through optical scanners requires several post processing steps for it to be a suitable for Delaunay Tessellation by even the most robust surface to tetrahedral mesher.
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.45\textwidth]{./figures/rawscan.png}
+%% 		\caption{Raw Surface Mesh of a Fan Blade}
+%% 		\label{fig_rawscan}
+%% 	\end{center}
+%% \end{figure}
+
+%% Figure \ref{fig_rawscan} shows the raw surface mesh obtained from an optical scanner of an as-manufactured blade.  This surface mesh contains 1.86 million vertices and 3.73 million triangles.  Both the density and the quality of the surface mesh must be modified to make this a mesh a viable input mesh for 3D Delaunay tessellation.  Modern decimation algorithms, such as greedy or incremental decimation, reduce the number of vertices and faces of the input a triangular surface mesh while preserving the geometry of the original mesh.  One of the best performing mesh decimation algorithms is a mesh decimation scheme that relies on quadric error metrics\cite{Garland:1997:SSU:258734.258849} to minimize the geometric surface variation between the pre and post decimated mesh while still maintaining reasonable surface face quality.  The original input mesh of was decimated to 15,000 points using the quadric decimation algorithm and the quality of the resulting mesh is shown in \ref{fig_decimated}.
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.45\textwidth]{./figures/decimated_aspect.png}
+%% 		\caption{Post Quadric Decimation Surface Mesh Quality}
+%% 		\label{fig_decimated}
+%% 	\end{center}
+%% \end{figure}
+
+%% The triangle aspect ratio from the decimated mesh has been plotted to highlight the mesh quality issues pervasive with raw meshes or decimated tessellated surfaces.  Despite using one of the most robust and quality preserving decimation schemes available, the key triangular mesh quality measures\cite{2003baker} of aspect ratio, skew, and edge ratio were not optimized and this will result in a poor or failed internal Delaunay tessellation of this surface mesh.  Minimizing the frequency of obtuse or acute angles from the input surface mesh is critical for accurate FEM analyses\cite{Yan2015}, and tessellated surface meshes can be optimized and regularized without modifying the underlying geometry of the mesh through a process known as mesh regularization.  This approach will be applied to improve and control the quality and number of surface vertices comprising the scan of this fan blade.
+
+%% The regularization of surface meshes is a well researched topic and has been approached from a variety of directions including active-front based and Delaunay insertion algorithms.  The approach used here for the dense and irregular meshes from optical scanners is a cluster based centroidal Voronoi tessellation (CVT) scheme.  CVT remeshing yields highly regularized meshes with minimal computational time and can be programmed to place additional weight on areas of high curvature or strain energy.  This allows for both for adaptive mesh refinement and high geometric accuracy.
+
+%% \subsubsection*{Centroidal Voronoi Tessellation (CVT)}
+%% The surface mesh inputted into the modified CVT algorithm is $\mathcal{M}=\{F,\ V\}$, generally a non-manifold triangular mesh consisting of a set of vertices, $V$, and faces, $F$.  The goal of CVT is to compute new $V'$ that are equidistantly located upon the surface of the original mesh $\mathcal{M}$.  These vertices, along with the intersection points of the Voronoi clusters, are then used to compute the topography of the regularized mesh $\mathcal{M'}=\{F', V'\}$.
+
+%% The CVT of an input mesh is an implementation of Voronoi tessellation that seeks to minimize the energy of each individual Voronoi region composing the input mesh $\mathcal{M}$.  This algorithm, with some modifications by the author, initializes Voronoi $\Omega_{i}$ regions by beginning at a random point on the mesh and initializing adjacent regions from that point until all faces have been assigned to a Voronoi region.  Empty clusters, or clusters that were not accessible by the initial moving front, are populated in the same manner except the random starting point is limited to the subsection of the mesh that remains unassigned.
+
+%% The initial Voronoi region sizes are controlled by dividing the area of the surface mesh by requested number of points in the final mesh and allowing each initialized region to grow up until adding a successive face would exceed the remaining surface area divided by the number of regions remaining to be populated.  The shape of the Voronoi regions are optimized by iteratively swapping the region association from each mesh face $F$ to minimize the energy function
+%% \begin{center}
+%%   $ F_{\mathrm{C}VT}(\displaystyle \mathrm{X})=\sum_{i=1}^{n}
+%%   \int_{\Omega_{j}}\rho(\mathrm{x})\Vert \mathrm{x}-\mathrm{x}_{i}
+%%   \Vert^{2}\mathrm{d}\sigma$
+%% \end{center}
+%% where each Voronoi cell $\Omega_{i}=\{\mathrm{x}\in R^{3}|\Vert \mathrm{x}-\mathrm{x}_{i}\Vert\leq\Vert \mathrm{x}-\mathrm{x}_{j}\Vert,\forall j\neq i\}$ contains a set of $n$ points located at $\mathrm{x}_{i}$.  The energy of each cell is the sum of the distances between each point $\mathrm{x}_{0}$ and the centroid of the Voronoi cell $\mathrm{x}$ multiplied by a density function $\rho(\mathrm{x})\geq 0$.  Nominally, this density function is the mean point area computed to offset higher point densities in portions of the input surface mesh containing smaller faces, but the density function can be adjusted to prioritize curvature or strain energy.
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.45\textwidth]{./figures/clustered_aspect.png}
+%% 		\caption{Regularized Surface Mesh Quality}
+%% 		\label{fig_regularmesh}
+%% 	\end{center}
+%% \end{figure}
+
+%% Figure \ref{fig_regularmesh} shows the vastly improved mesh quality after post-processing the original raw mesh as compared to the quadric decimation scheme.  The mean triangle aspect ratios were improved from 1.78 to 1.26 and, more importantly, no triangle aspect ratios exceeded 2.00 with the CVT mesh.
+
+%% Having arrived at a manifold, non-intersecting tessellated surface mesh derived from geometry from a blue light scanner, the next step in FEM generation is to pass the surface mesh as an input to a 3D Delaunay-based tetrahedral mesher.  The tetrahedralization of a volume bounded by a triangular surface can be achieved through the incremental insertion of Steiner points using Delaunay algorithms and the identification and storage of the original, inserted, and tetrahedrals constructed using constrained Delaunay algorithms.
+
+%% Element quality was controlled by the insertion of additional interior nodes after the first tetrahedralization pass.  Elements with radius-edge ratios below 1.1 and dihedral angles below 10$^{\circ}$ were subdivided until the elements were of sufficient quality. It was found that allowing for the insertion of Steiner points on the surface of the regularized tessellated surface yielded ultra high density meshes with only small improvements in mesh quality.  As a result, tetrahedralize meshes with poor element quality were disregarded and the input meshes were re-optimized using more restrictive CVT and the raw scans were locally subdivided to arrive at denser meshes.  It was only by controlling the quality of the input surface mesh that quality volumetric meshes could be realized.
+
+%% The automated meshing approach presented here will be referred to from this point onward as ScanTET.
+
+%% \section*{ANALYTICAL COMPARISON}
+%% The scanned fan blade shown in Figure \ref{fig_rawscan} was reverse engineered using a commercially available tessellated mesh to CAD software to provide a benchmark for the ScanTET generated tetrahedral mesh.  The geometry of the manually generated hexahedral mesh was then post-processed using MORPH to ensure the surface nodes of the FEM were placed exactly on the surface of the surface geometry from the optical scanner.  The hexahedral mesh contains approximately 550,000 nodes.  Figure \ref{fig_meshcomp} shows the hexahedral FEM plotted with the ScanTET mesh to show the variation in mesh density between the a low density 5,000 node tetrahedral mesh and the 550,000 node blade model.
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.45\textwidth]{./figures/LowDensityMeshComparison.png}
+%% 		\caption{High Density Hexahedral and ScanTET FEM}
+%% 		\label{fig_meshcomp}
+%% 	\end{center} 
+%% \end{figure}
+
+%% To evaluate the accuracy and fidelity of the automatically generated all-tetrahedral mesh, a series of meshes ranging from 5,000 to 400,000 were generated using the ScanTET Python module.  The hexahedral mesh and the ScanTET batch meshes were run in a free-free condition modal analysis and the first 20 modes were extracted.
+
+%% \subsection*{Mode Shape Validation}
+%% The first 20 mode shapes from the modal analysis of each all-tetrahedral FEM were compared to the first 20 mode shapes of the hexahedral FEM using the Modal Assurance Criterion (MAC).  MAC is a statistical indicator of the similarity of two mode shapes ranging from 0 to 1 and is generally used to identify and assign modes from experimentally obtained data and will be used here to determine the accuracy of the tetrahedral model.  The MAC of two similar modes measured at the same points is calculated by 
+%% \begin{center}
+%% MAC $(\displaystyle \phi_{i},\ \phi_{j})=\frac{(\phi_{i}^\intercal\phi_{j})^2}{(\phi_{i}^\intercal\phi_{i})(\phi_{j}^\intercal\phi_{j})}$
+%% \end{center}
+%% where the eigenvector $\phi_{i}$ is the modal displacement of a mode from one modal analysis and eigenvector $\phi_{j}$ is the modal displacement of a mode from another modal analysis.  MAC assumes the displacement vectors are the same size and measured in the same location for each model and it cannot be directly applied to two differing models without first interpolating between the models.  As this can be a significant source of error, care was taken to use a robust algorithm to interpolate the displacement field of one model given the coordinates of another model.  With this approach a direct mapping was established between displacement field of the hexahedral FEM and the ScanTET FEM which was independent of the mesh density or node placement.
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.45\textwidth]{./figures/Mode8_ldtet.png}
+%% 		\caption{Mode 8: Low Density ScanTET FEM}
+%% 		\label{fig_meshcomp0}
+%% 	\end{center}
+%% \end{figure}
+
+%% Without mesh optimization the ScanTET converged to a MAC of 0.993 for the first 20 modes with a mesh containing 40,000 edge surface nodes, 400,000 total nodes, and 250,000 elements.  The high degree of agreement indicates the displacement results from both models agree and are, in-effect, near identical for the first 20 modes.  Lower density models showed poorer correlations to the hexahedral mesh, particularly for models with less than 5,000 surface nodes and 30,000 total nodes.  To improve the convergence rate and potentially reduce the number of nodes to less than those used in the hexahedral FEM, the convergence study was analyzed and rerun using additional mesh optimization.
+
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.45\textwidth]{./figures/Mode8_hex.png}
+%% 		\caption{Mode 8: High Density Hexahedral Mesh}
+%% 		\label{fig_meshcomp1}
+%% 	\end{center}
+%% \end{figure}
+
+%% In a convergence study variations between the in-term mesh and the converged model can be attributed to either geometry and mesh discretization error.  The lower density ScanTET meshes were found to be geometrically accurate along the platform of the blade but inaccurate at the leading, trailing, and blade tips.  Modes with strain energy (displacement) at the edges of the blade were found to have the lowest MAC scores of the first 20 modes for the low-density meshes.  Figures \ref{fig_meshcomp0} and \ref{fig_meshcomp1} show that at an area of high displacement for the mode shape of mode 8 for the 20,000 node ScanTET FEM and the hexahedral mesh, the ScanTET mesh poorly models the geometry of the blade and this accounts for the lower 0.85 MAC of this mode and a mean MAC of 0.836 for the first 20 modes.  Three additional convergence batches were run to evaluate the role of geometry in mesh generation.
+
+%% These results motivated inclusion of a method to increase tetrahedral density at the airfoil edges.  This process improved the convergence rate significantly, raising mode shape agreement from a MAC of 0.837 without optimization to a MAC of 0.943 with only MORPH based geometry optimization and 0.963 by increasing edge density.  When used together, ScanTET achieves a MAC of 0.991 with a 30,000 node model and a MAC of 0.999 with only a 70,000 node FEM.  Figure \ref{fig_meshcomp2} shows the relative convergence rates of the four convergence batches.
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.45\textwidth]{./figures/Mac0.png}
+%% 		\caption{Mean MAC to Hexahedral Mesh}
+%% 		\label{fig_meshcomp2}
+%% 	\end{center}
+%% \end{figure}
+
+%% Given the high model accuracy at a relatively low model density, it is clear that geometric accuracy plays a crucial role in mesh accuracy.  Normally, geometry and discretization error are difficult to separate during a convergence study, but as ScanTET is able to iteratively maximize geometric accuracy, geometric convergence plays only a small role in a mesh convergence study.  It should be noted that MORPH places mid-side nodes directly on the surface of the tessellated scan and as such the two optimization approaches can be thought of as idealizing the placement of edge and mid-side nodes.
+
+%% Further verification of the ScanTET algorithm was performed by extending the comparison of the the mode shapes to the first 46 modes of the optimized 400,000 node with the 500,000 node hexahedral FEM.  The mean MAC across all modes was 0.994 and the lowest scoring mode was mode 30 with a MAC of 0.953.  Upon further investigation, the mode was found to have the majority of the strain energy in a small portion the trailing edge tip that the ScanTET mesh captured better than the hexahedral mesh as shown in figures \ref{fig_meshtip_tet} and \ref{fig_meshtip_hex}.  While this inconsistency helps to indicate the reason for the difference between the mode shapes from the two models, it also highlights how a hexahedral mesh capture curved portions of geometry poorly and subsequent model redesign will have to occur to capture this feature.  No fillets were modeled in the CAD for the hexahedral FEM as doing so would have invalidated the blade volume for hexahedral meshing.  If it became necessary to model the blade tip curvature to accurately capture this higher frequency mode, then both the CAD and the mesh would have to be modified, leading to the tedious design, analyze, and redesign feedback loop that often plagues finite element analysis.
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/meshtip_tet.png}
+%% 		\caption{ScanTET FEM Trailing Edge Geometry}
+%% 		\label{fig_meshtip_tet}
+%% 	\end{center}
+%% \end{figure}
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/meshtip_hex.png}
+%% 		\caption{Hexahedral FEM Trailing Edge Geometry}
+%% 		\label{fig_meshtip_hex}
+%% 	\end{center}
+%% \end{figure}
+
+%% While all-tetrahedral meshes are by no means the best meshing approach for all problems, this analytical comparison shows that comparable results can obtained with an automatically generated all-tetrahedral mesh.  Computationally, the greatest advantage of the ScanTET process is its ability to adapt mesh density to match the geometry of the target mesh, yielding rapid geometric convergence for a given mesh density as compared to the standard meshing approach.  For the engineer, ScanTET allows for the rapid translation of a non-manifold tessellated surface into a 3D quadratic tetrahedral mesh in moments and a mesh convergence study that can be run with minimal configuration.  While a tetrahedral mesh is not as numerically efficient than a corresponding hexahedral mesh, the complexity of a hex-dominant or all-hexahedral mesh is often leads to less than optimal convergence studies that focus on mesh discretization error rather than geometric error.  Given that the computational time for a modal analysis of the converged 400,000 node tetrahedral mesh was only 180 seconds on an 2016 Intel 2.9GHz processor, the time to remesh and redesign a far exceeds any, if tangible, gains in numerical efficiency when resorting to a hex-dominant mesh.
+
+%% \subsection*{Stress Field Validation}
+%% The accuracy of the von Mises stress field from the ScanTET tetrahedral mesh was validated by comparing the stress fields from a convergence study of 25 meshes to the converged hexahedral mesh introduced in the previous section.  These meshes were generated using the optimal node placement approach where node placement is influenced by local curvature and where the positions of the auto-generated mesh were placed exactly on the surface of the scan data using MORPH.  The convergence study indicated that the von Mises stress, and in particular the maximum von Mises stress, converged to within 1\% of the stress from the dense hexahedral mesh for an all tetrahedral mesh containing approximately 650,000 nodes, about 100,000 more nodes than the converged hexahedral mesh.  This is demonstrated in figure \ref{fig_meshtip_hex} where the mean error between the maximum von Mises stress between the tetrahedral and hex-dominant mesh across the first 20 modes is compared.
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/stresserrorplot.png}
+%% 		\caption{ScanTet Stress Convergence Study}
+%% 		\label{fig_meshtip_hex}
+%% 	\end{center}
+%% \end{figure}
+
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/stressMode18.png}
+%% 		\caption{Mode 18 Stress Fields for Hex Dominant and ScanTET Meshes}
+%% 		\label{stress_Mode18}
+%% 	\end{center}
+%% \end{figure}
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/stresserror.png}
+%% 		\caption{Maximum Error Between Hex Dominant and ScanTET Stress Fields}
+%% 		\label{error_Mode18}
+%% 	\end{center}
+%% \end{figure}
+
+
+%% The maximum von mises stress for the first 20 modes converged to within 1\% the maximum stress reported by the the convergence study, but this is based on the stress reported at the nodes of both the models and is not the most accurate measure of the agreement between the two models as the nodes in each model are not in identical positions.  This leads to an innacuracy in the maximum stress reported by each model which is due to the finite nature of FEA where stress is computed on an element by element basis and is discontinious across elements.  Modern commerical FEA software compensates for this by computing strain for each element at the gauss intergration points at each element and extrapolating it to the element's edge nodes, and then averaging the stress obtained from each element at each edge node.  This serves not only to smooth the stress field, but to also provide an estimate of convergence as a large discrepancy between the stress at a single node as reported by its adjcent elements indicates discretiziation error.  To better esimate the agreement of stress field between the hex-dominant mesh and the ScanTET mesh, the global stress field of the tetrahedral mesh was interpolated at the same location as the nodes of the hex-dominant mesh using local, clustered polyharmonic spline interpolation.  This allowed for a direct comparison of the stress field since the sampling locations of both stress fields are identical.  Applying this approach reduced the mean stress field error between the two meshes to less than 0.15\% for the converged mesh.
+
+%% Figures \ref{stress_Mode18} and \ref{error_Mode18} show the stress fields as computed by the the hexahedral and tetrahedral meshes and the relative error between the two when normalizing the mode responses.  It should be noted that as the tetrahedral mesh matched the geometry of the surface scan at the blade tip and edges better than the hexahedral mesh, the stress errors between the two meshes are not necessiarly due to discretiziation error and may in fact be due to the geometric innaccuracy of the hexahedral mesh.
+
+%% \section*{EXPERIMENTAL VALIDATION}
+%% The experimental validation of the ScanTET approach is separated into two sub-sections.  The first validates the ability of an autogenerated all-tetrahedral model to accurately predict mode shapes and frequency variations of a single isolated blade, and the second subsection validates the ScanTET model on a full wheel IBR.
+
+%% \subsection*{Isolated Blade Verification}
+%% The all-tetrahedral meshing approach was first validated against a single isolated blade.  The geometry of four fan blades was obtained from an optical scanner and a hex-dominant nominal model was built using commercially available CAD modeling software based on the mean geometry position.  This model served as the nominal model and was analyzed in a modal analysis that simulated the clamped experimental setup.
+
+%% The experimental setup used a Polytec PSV-500 laser vibrometer to measure a fan blade clamped in broach block fixture.  The blade was acoustically excited from from 40 to 3,500 Hz and mode shapes were extracted by identifying peaks from a frequency sweep at the blade tip and measuring the mode shape at those peaks at 162 measurement points when exciting the blade at that frequency.  While it was discovered when correlating the experimental results to the analytical models that this was not the most optimal approach, due to the size of the fan blade it was difficult to excite it strongly enough to acquire its frequency response function across the entire frequency range rather than at isolated frequencies.
+
+%% For consistency, during the single frequency mode shape extraction an attempt was made to extract the same frequency and mode shape mode across all four blades and the effect of geometric variation and mode swapping was greatly underestimated.  During post-processing, it was discovered using Modal Assurance Criteria that modes that were originally though to be the same due to their frequency were in fact different modes.  A summary of the experimentally obtained mode frequencies obtained is shown in \ref{extract_vs_pred}.  These modes have been associated with the nominal model using the MAC between the mode shapes of the nominal model sampled at the same coordinates as the experiment.
+
+%% \begin{table}[t]
+%% \caption{NOMINAL AND EXPERIMENTALLY OBTAINED MODE FREQUENCIES}
+%% \vskip 0.2cm
+%% \begin{center}
+%% \label{extract_vs_pred}
+%% \begin{tabular}{ |c|c|c|c|c|c| }
+%%   \hline
+%%    & \multicolumn{5}{c|}{Frequencies} \\
+%%    Mode & Nominal & Blade 1 & Blade 2 & Blade 3 & Blade 4 \\   
+%%   \hline
+%% 1 &   48.72 &   49.22 &   48.63 &   50.78 &    49.90 \\
+%% 2 &  168.41 &  165.63 &  161.00 &  169.75 &   167.88 \\
+%% 3 &  313.59 &    -    &    -    &    -    &    -     \\
+%% 4 &  413.65 &    -    &    -    &    -    &    -     \\
+%% 5 &  743.38 &    -    &    -    &    -    &    -     \\
+%% 6 &  825.08 &    -    &    -    &    -    &    -     \\
+%% 7 & 1170.82 &    -    &    -    &    -    &    -     \\
+%% 8 & 1296.52 &    -    &    -    &    -    &    -     \\
+%% 9 & 1497.64 & 1479.98 & 1471.80 & 1487.30 &  1479.25 \\
+%% 10 & 1628.34 & 1568.59 & 1565.47 & 1625.00 &  1621.72 \\
+%% 11 & 1774.02 &    -    &    -    &    -    &    -     \\
+%% 12 & 2095.02 &    -    &    -    &    -    &    -     \\
+%% 13 & 2412.76 &    -    &    -    &    -    &    -     \\
+%% 14 & 2455.92 &    -    &    -    & 2478.39 &  2469.73 \\
+%% 15 & 2570.46 & 2490.48 & 2487.06 & 2528.93 &  2515.01 \\
+%% 16 & 2720.88 & 2624.15 & 2608.64 &    -    &    -     \\
+%% 17 & 2929.75 &    -    &    -    &    -    &    -     \\
+%% 18 & 3120.51 &    -    &    -    & 3089.60 &  3076.17 \\
+%% 19 & 3181.44 & 3096.56 & 3071.17 &    -    &    -     \\
+%% 20 & 3431.39 &    -    &    -    &    -    &    -     \\
+%%   \hline
+%% \end{tabular}
+%% \end{center}
+%% \end{table}
+
+%% The modes were correlated with the nominal model using MAC by comparing the experimentally obtained mode shape and matching using MAC with the nominal model as well as the ScanTET all-tetrahedral model.  The mean MAC score between the best matching experimentally obtained mode shapes and the nominal model was 0.929 while the mean MAC score between the experiment and the geometrically accurate ScanTET models was 0.944.  This slight improvement in the accuracy of the mode shapes of the analytical results using ScanTET was largely driven by mode 19 from Blade 2 which had a 0.5934 MAC correlation with the nominal model and a 0.955 MAC correlation with its corresonding ScanTET model.  Note that all mode shapes from the ScanTet based models have a correlation of 0.77 or better (with an average of 0.944) for the best matching mode to the ScanTET model, with the second best match scoring poorly (between 0.04 and 0.41).
+
+%% %% Blade 1    ScanTET       Nominal
+%% %% 49.22   1  [ 0.99890534] [ 0.99889865]
+%% %% 165.63  2  [ 0.99665898] [ 0.99707962]
+%% %% 1479.98 9  [ 0.96204133] [ 0.97382537]
+%% %% 1568.59 10 [ 0.80105628] [ 0.89561363]
+%% %% 2490.48 15 [ 0.96305892] [ 0.95678343]
+%% %% 2624.15 16 [ 0.85241371] [ 0.88495579]
+%% %% 3096.56 19 [ 0.95765477] [ 0.93238824]
+
+%% %% Blade 2    ScanTET       Nominal
+%% %% 48.63    1 [ 0.99845849] [ 0.99853899]
+%% %% 161.0    2 [ 0.99714888] [ 0.99812099]
+%% %% 1471.8   9 [ 0.97757489] [ 0.97770871]
+%% %% 1565.47 10 [ 0.7790239]  [ 0.81772938]
+%% %% 2487.06 15 [ 0.96020566] [ 0.94939163]
+%% %% 2608.64 16 [ 0.87572521] [ 0.88126517]
+%% %% 3071.17 19 [ 0.95525589] [ 0.59347863]
+
+%% %% Blade 3    ScanTET       Nominal
+%% %% 50.78    1 [ 0.99723444] [ 0.99714132]
+%% %% 169.75   2 [ 0.9919155]  [ 0.99181745]
+%% %% 1487.3   9 [ 0.97656569] [ 0.97149115]
+%% %% 1625.0  10 [ 0.88936883] [ 0.8960823]
+%% %% 2478.39 14 [ 0.97703599] [ 0.89789896]
+%% %% 2528.93 15 [ 0.96076241] [ 0.96342525]
+%% %% 3089.6  18 [ 0.90873618] [ 0.91011631]
+
+%% %% Blade 4    ScanTET       Nominal
+%% %% 49.9     1 [ 0.9982202]  [ 0.99815101]
+%% %% 167.88   2 [ 0.99667709] [ 0.99643352]
+%% %% 1479.25  9 [ 0.97798099] [ 0.96211537]
+%% %% 1621.72 10 [ 0.90021132] [ 0.86905449]
+%% %% 2469.73 14 [ 0.97535134] [ 0.85248162]
+%% %% 2515.01 15 [ 0.93799593] [ 0.93188714]
+%% %% 3076.17 18 [ 0.86270335] [ 0.93697606]
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/modeswap_anl.png}
+%% 		\caption{Predicted: Mode 19 Variation Between Blades 1 and 2}
+%% 		\label{fig_modeswap_anl}
+%% 	\end{center}
+%% \end{figure}
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/modeswap_exp.png}
+%% 		\caption{Observed: Mode 19 Variation Between Blades 1 and 2}
+%% 		\label{fig_modeswap_exp}
+%% 	\end{center}
+%% \end{figure}
+
+%% \begin{table}[t]
+%% \caption{COMPARING VARIATIONS IN MODE FREQUENCIES}
+%% \vskip 0.2cm
+%% \begin{center}
+%% \label{freq_correlation}
+%% \begin{tabular}{ |c|c|c|c|c|c| }
+%% \hline
+%% & \multicolumn{5}{c|}{Frequencies (Hz)} \\
+%% Mode & Nominal & Blade 1 & Blade 2 & Blade 3 & Blade 4 \\   
+%% \hline
+%%  1 (Mod)  &   48.72  & 48.25   &   47.51 &   49.69 &   48.89 \\
+%%  1 (Exp)  &     -    & 49.22   &   48.63 &   50.78 &   49.90 \\
+%%  \hline
+%%  & \multicolumn{5}{c|}{Mode 1 Correlation: 0.9973246} \\
+%%  \hline
+%%  2 (Mod)  &  168.41  &  165.48 &  160.18 &  169.34 &  167.57 \\
+%%  2 (Exp)  &     -    &  165.63 &  161.00 &  169.75 &  167.88 \\
+%%  \hline
+%%  & \multicolumn{5}{c|}{Mode 2 Correlation: 0.9985572} \\
+%% \hline
+%%  9 (Mod)  & 1497.64  & 1495.65 & 1495.87 & 1504.24 & 1498.74 \\
+%%  9 (Exp)  &     -    & 1479.98 & 1471.80 & 1487.30 & 1479.25 \\
+%%  \hline
+%%  & \multicolumn{5}{c|}{Mode 9 Correlation: 0.83619942} \\
+%% \hline
+%% 10 (Mod)  & 1628.34  & 1613.99 & 1599.85 & 1646.12 & 1641.34 \\
+%% 10 (Exp)  &     -    & 1568.59 & 1565.47 & 1625.00 & 1621.72 \\
+%%  \hline
+%%  & \multicolumn{5}{c|}{Mode 10 Correlation: 0.97357517} \\
+%% \hline
+%% 15 (Mod)  & 2570.46  & 2445.09 & 2431.54 & 2485.61 & 2485.16 \\
+%% 15 (Exp)  &     -    & 2490.48 & 2487.06 & 2528.93 & 2515.01 \\
+%%  \hline
+%%  & \multicolumn{5}{c|}{Mode 15 Correlation: 0.97874148} \\
+%% \hline
+%% \end{tabular}
+%% \end{center}
+%% \end{table}
+
+%% While it is important in the context of mistuning to idenfity the frequency variations of a mode due to changes in geometry, it is nonetheless critical to idenfity changes in mode shapes due to geometric variation.  The poor nominal to experimental correlation of Mode 19 versus the strong agreement with the ScanTET model indicates that an all-tetrahedral model based on as-manufactured geometry is capable of predicting changes in mode shapes due to geometric variation.  These variations are also pronounced when comparing the analytical mode shapes between blades 1 and 2.  Figure \ref{fig_modeswap_anl} show how the analytical results from the ScanTET models agree with the observed experimental mode shape variations in \ref{fig_modeswap_exp}.
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/dist_to_nominal.png}
+%% 		\caption{Mesh Distances from Nominal}
+%% 		\label{dist_to_nominal}
+%% 	\end{center}
+%% \end{figure}
+
+%% As the variations between the analytical ScanTET models were solely geometry driven, it can be reasonably assumed that geometry is the driving factor behind the variations in mode shapes.  This is further supported by Figure \ref{dist_to_nominal}, where the variation in geometry between the as-manurfactured models and the nominal model for blade 2 is larger relative to the variation in geometry between blades 1, 3, and 4.  This indicates that the geometry of the blade tip likely to be the main driver driver of the variation in mode 19.
+
+%% It should be noted that the relative variation in blade geometry is quite small; blade thickness varies at maximum only 1.5\% relative to the thickness of the blade.  While well within the $\pm$ \SI{254}{\micro\metre} tolerance of the blue light scanner, the variations in blade shape were small enough to affect the higher frequency mode shapes and this reflects positively on the analytical ScanTET models as FEA model accuracy tends to drop off with increasing frequency.
+
+%% In the context of predicting frequency variation for mistuning analysis, the experimental results from each blade were paired with an analysis of the same blade generated using ScanTET based on geometry from an optical scanner.  The frequencies of these modes were compared and the frquency shifts agreed favorably between the two sets of data.  The mean Pearson correlation between the experimental and analytical results for those modes was 0.9568 with a minimum correlation of 0.836 and a maximum of 0.9985.  See table \ref{freq_correlation}.
+
+%% \subsection*{Automated Meshing of an Integrally Bladed Disk}
+%% The ScanTET algorithm was applied to as-measured tessellated scan geometry from a full 360$^{\circ}$ rotor.  Unlike the blade model, the tesselated surface mesh of the rotor from the optical scanner contained several non-manifold features that are classified as mesh ``holes''.  Rather than manually filling these ``holes'', which somewhat defeats the purpose of an automated meshing algorthim, this mesh was first CVT clustered and then automatically made manifold by connecting nearby triangles and sealing the mesh by removing any remaining non-manifold interior faces.  The resulting mesh accurately modeled the blade and disk geometry of the actual as-manufactured rotor except for the central bore.  As shown in Figure \ref{fig_ibr_disk}, the automated meshing algorthim forced the bore cylinder cut shut and filled in the center of the bore with solid elements.  The blades, however, are consistently and accurately modeled as the blades and platform do no have the same line of sight (LOS) issues as the disk.  Two full wheel FEMs were created, one with approximately 1.5 million nodes and another with 2 million nodes.
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/ibr_disk.png}
+%% 		\caption{ScanTET: Modeled Disk of a Flight Hardware IBR}
+%%                 \label{fig_ibr_disk}
+%% 	\end{center}
+%% \end{figure}
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/ibr_blade.png}
+%% 		\caption{ScanTET: Modeled Blades of a Flight Hardware IBR}
+%% 		\label{fig_ibr_blades}
+%% 	\end{center}
+%% \end{figure}
+
+%% The full wheel IBRs models were exported from ScanTET to a commercial FEA solver for a full wheel modal analysis to determine if the full wheel tetrahedral model can be used to determine sector mistuing.  It should be noted that while the analysis took much longer than a ROM based analysis, the total solve time of the mistuned modal analysis was approximately one and two hours for the two respective meshes on a 2017 mid-range workstation.  Though it would have been possible to isolate each sector using a mesh cut, the viability of the full wheel model was determined by solving the entire model and then extracting the mistuning parameters using FMM ID\cite{Fein2004A, Fein2004B} and then comparing them to similarly extracted parameters from traveling wave excitation (TWE).
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/twe.png}
+%% 		\caption{Academic TWE Experimental Setup}
+%% 		\label{fig_twe_setup} 
+%% 	\end{center}
+%% \end{figure}
+
+%% An isolated mode family was identified from the analytical model and the mode shape at a near identical location for each blade was extracted along with the frequencies for each mode in the mode family.  Using FMM ID, it was possible to obtain the tuned system modes and the mistuned sector deviations for the single isolated mode family, which has been shown to be similar the mean frequency deviations of isolated sectors for modes with low disk participation.  As the mode selected was highly disk dominant, the authors were confident that the FMM ID ROM accurately identified the mistuned and tuned system characteristics for that mode family.  These parameters were then compared against parameters extracted using traveling wave excitation.  A polytec laser vibrometer measured the mode shape across a narrow frequency range while the IBR was being excited magnets configured to generate a traveling wave \cite{Jones2003}.  As this was a reasonably low frequency mode, it was possible to extract the isolated mode shapes and provide the identified mistuned mode family to FMM ID.
+
+%% \begin{figure}[t]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/fmmid_mistuned.png}
+%% 		\caption{Analytically versus Experimentally Obtained Sector Mistuning}
+%% 		\label{fig_fmmid_mistuning}
+%% 	\end{center}
+%% \end{figure}
+
+%% \begin{figure}[b]
+%% 	\begin{center}
+%% 		\includegraphics[width=0.47\textwidth]{./figures/fmmid_tuned.png}
+%% 		\caption{Analytically versus Experimentally Obtained Sector Mistuning}
+%% 		\label{fig_fmmid_tuned}
+%% 	\end{center}
+%% \end{figure}
+
+
+%% For this isolated mode family, the Pearson correlation coefficient between analytical and experimental sector mistuning is 0.943 and the results are shown in \ref{fig_fmmid_mistuning}.  The the correlation of identified tuned system frequencies was 0.9953 and is shown in \ref{fig_fmmid_tuned}.  These results are nearly identical with the sector mistuning deviations dervived from from a high density, manually generated all-hexahedral model that was updated using MORPH to match the surface geometry of the as-maufactured part.  It should be noted as well as that there was no noticable improvement in accuracy when using the denser tetrahedral model, indicating that the model has reached mode shape convergence.  The error between the experimentally and analytically obtained sector mistuning ratios can likely be attributed to modeling error, experimental noise, disk energy, and potentially numeric mistuning due to variations between the blade to blade meshes.  However, this high degree of correlation between these two approaches demonstrates that an all-tetrahedral model can be used to model mistuning, particularrly as both approaches predict a tuned absorber effect for an engine order 4 forcing function.
+
+
+%% \section*{LIMITATIONS AND AREAS OF IMPROVEMENT}
+%% It should be noted that as this algorithm relies on the line of sight (LOS) of the the entire part, turbomachinery with non-LOS geometry may not be able to be accurately modeled using ScanTET without first pre-processing the model.  Since the non-LOS geometry had nearly zero contribution to the mode investigated in the full wheel IBR experiment, the LOS issue did to affect the results.  However, for regions where non-LOS geometry participates in the mode, nominal, or assumed geometry must be inserted into the tessellated scan in order to arrive at a reasonably complete mode.  Furthermore, while ScanTET has been shown to converge rapidly, an all tetrahedral mesh is less computationally efficient than a hex-dominant mesh.  Therefore, if an as-designed CAD and mesh already exists, it would be more efficient to use the pre-existing mesh and adapt the surface geometry to as-measured geometry using a MORPH mesh metamorphosis approach.  The trade off with approach is the high potential for the manual modeling and remeshing of the as-designed mesh if the geometry or discretization error requires convergence.
+
+
+%% \section*{CONCLUSIONS AND FUTURE RESEARCH}
+%% Understanding the effects of variations in geometry is critical for accurately modeling and predicting individual and populations of turbomachinery hardware.  The comprehensive, automated modeling and meshing approach ScanTET was shown not to just capture the general response of fan blades, but to accurately predict mode swapping due to minute variations in blade geometry.  As optical scanners become more prevalent and their usage more mainstream, it may finally be possible to move beyond traditional CAD-based and automate the modeling, meshing, and analysis of as-designed, modified, or damaged inserted blades.
+
+%% The ScanTET modeling algorithm can be used to supplement, and in some situtations replace, the standard meshing approach.  Not every part will have near complete LOS, nor will high geometric accuracy always be necessary for accurate modeling.  However, this research has shown that an automatically generated tetrahedral mesh based on a tessellated surface a blue-light scanner is just as accurate for inserted blades as a manually generated, partial hexahedral model.  The ScanTET algorithm shows that mesh modeling is not always trading user-modeling time for mesh accuracy or fidelity, and that an automated meshing approach is more than sufficiently accurate to predict mode shapes for as-manufactured blades.  With modern hardware, it may make more sense to model with quadratic tetrahedrals to reduce user modeling time and increase model confidence with automated mesh convergence studies based on both mesh discretization error as well as geometry, which has been shown here to play a crucial role in FEM accuracy.
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% \bibliography{TurboExp2018}
+%% \bibliographystyle{asmems4}
+
+\end{document}
